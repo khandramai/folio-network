@@ -1,38 +1,72 @@
+#####################################################################################
+# FOLIO Network graph visualizer                                                    #
+#
+# R-script for visualization of dependencies between Folio modules dependencies 
+# in the form of a network graph.
+#
+####################################################################################
+
 library(jsonlite)
 library(igraph)
 library(dplyr)
+
+# INPUT ---> List of module names for processing
+modules <- c("mod-orders", "mod-inventory", "edge-oai-pmh", "edge-patron", "edge-orders", "mod-oai-pmh")
 
 nodes <- c()
 from <- c()
 to <- c()
 
-modules <- c("mod-inventory")
-
+# Core logic
 for(i in 1:length(modules)) {
-  descriptor <- fromJSON(paste("https://raw.githubusercontent.com/folio-org/", modules[[i]], "/master/descriptors/ModuleDescriptor-template.json", sep=""))
+  
+  descriptor <- fromJSON(paste("https://raw.githubusercontent.com/folio-org/", 
+                               modules[[i]], 
+                               "/master/descriptors/ModuleDescriptor-template.json", sep=""))
+  
   requires <- descriptor[["requires"]]
-  init = length(nodes)
-  for (j in 1 : length(requires[[1]])) {
-    from[[j + init]] <- paste(descriptor[["provides"]][["id"]], descriptor[["provides"]][["version"]], sep=":")
-    to[[j + init]] <- paste(requires[[1]][[j]], requires[[2]][[j]], sep=":")
-    nodes[[j + init]] <- paste(requires[[1]][[j]], requires[[2]][[j]], sep=":")
+  provides <- descriptor[["provides"]]
+  
+  if(length(provides[["id"]]) == 0) {
+    module <- descriptor[["name"]] 
+  } else {
+    module <- paste(provides[["id"]], provides[["version"]], sep=":")
   }
-  nodes[[1 + length(nodes)]] <- paste(descriptor[["provides"]][["id"]], descriptor[["provides"]][["version"]], sep=":")
+  
+  if(!(module %in% nodes)) {
+    nodes[length(nodes) + 1] <- module
+  }
+  
+  for(j in 1 : length(requires[[1]])) {
+    dependency <- paste(requires[[1]][[j]], requires[[2]][[j]], sep=":")
+    to[length(to) + 1] <- dependency 
+    from[length(from) + 1] <- module
+    if(!(dependency %in% nodes)) {
+      nodes[length(nodes) + 1] <- dependency
+    }
+  }
 }
 
-nodes <- unique(nodes)
-
+# Data frames constructing
 modules <- data.frame(nodes)
 relations <- data.frame(from, to)
 
+# Net-object constructing
 net <- graph_from_data_frame(relations, directed=TRUE, vertices=modules)
 
+# Graph settings
 V(net)$size <- 10
 V(net)$frame.color <- "white"
 V(net)$color <- "orange"
-V(net)$label.cex <- 0.8
+V(net)$label.cex <- 0.9
+deg <- degree(net, mode="all")
+V(net)$size <- 2*deg
 E(net)$arrow.mode <- 0
 E(net)$width <- 2
-l <- layout_with_fr(net)
+
+# Layout type
+l <- layout_with_lgl(net)
+
+# OUPTUP <- graph
 plot(net, layout=l)
 
