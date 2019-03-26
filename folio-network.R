@@ -1,7 +1,7 @@
 #####################################################################################
-# FOLIO Network graph visualizer                                                    #
+# FOLIO Network graph visualizer                                                    
 #
-# R-script for visualization of dependencies between Folio modules dependencies 
+# R-script for visualization of Folio modules dependencies 
 # in the form of a network graph.
 #
 ####################################################################################
