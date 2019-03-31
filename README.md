@@ -1,16 +1,15 @@
-=================================================
-R-script for folio modules network visualization
-=================================================
+# R-script for folio modules network visualization
 
-# Version
+## Version
 1.0.0-beta 03/26/2019
 Added basic logic only for Folio back-end modules network graph visualization.
 
-# System requirements
+## System requirements
 Windows, Unix, Mac OS machine with installed R software https://www.r-project.org
+
 Optional: RStudio https://www.rstudio.com
 
-# How to run?
+## How to run?
 From console/terminal: TBD
 
 From RStudio:
