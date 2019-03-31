@@ -1,7 +1,7 @@
 #####################################################################################
-# FOLIO Network graph visualizer                                                    #
+# FOLIO Network graph visualizer                                                    
 #
-# R-script for visualization of dependencies between Folio modules dependencies 
+# R-script for visualization of Folio modules dependencies 
 # in the form of a network graph.
 #
 ####################################################################################
@@ -9,11 +9,17 @@
 library(jsonlite)
 library(igraph)
 library(dplyr)
+library(gh)
+library(gdata)
+
+j_repos <- gh("/users/:username/repos", username = "folio-org")
+vapply(j_repos, "[[", "", "name")
 
 # INPUT ---> List of module names for processing
-modules <- c("mod-orders", "mod-inventory", "edge-oai-pmh", "edge-patron", "edge-orders", "mod-oai-pmh")
+modules <- c("edge-oai-pmh", "mod-oai-pmh", "edge-orders", "mod-orders", "mod-gobi", "mod-inventory")
 
 nodes <- c()
+type <- c()
 from <- c()
 to <- c()
 
@@ -23,7 +29,7 @@ for(i in 1:length(modules)) {
   descriptor <- fromJSON(paste("https://raw.githubusercontent.com/folio-org/", 
                                modules[[i]], 
                                "/master/descriptors/ModuleDescriptor-template.json", sep=""))
-  
+
   requires <- descriptor[["requires"]]
   provides <- descriptor[["provides"]]
   
@@ -35,6 +41,11 @@ for(i in 1:length(modules)) {
   
   if(!(module %in% nodes)) {
     nodes[length(nodes) + 1] <- module
+    if(startsWith(modules[[i]], "edge")) {
+      type[length(type) + 1] <- 1
+    } else {
+      type[length(type) + 1] <- 2
+    }
   }
   
   for(j in 1 : length(requires[[1]])) {
@@ -43,30 +54,36 @@ for(i in 1:length(modules)) {
     from[length(from) + 1] <- module
     if(!(dependency %in% nodes)) {
       nodes[length(nodes) + 1] <- dependency
+      type[length(type) + 1] <- 2
     }
   }
 }
 
 # Data frames constructing
-modules <- data.frame(nodes)
+modules <- data.frame(nodes, type)
 relations <- data.frame(from, to)
 
 # Net-object constructing
 net <- graph_from_data_frame(relations, directed=TRUE, vertices=modules)
 
+
+# Community detection (by optimizing modularity over partitions):
+clp <- cluster_optimal(net)
+class(clp)
+
 # Graph settings
+colrs <- c("gray50", "tomato", "gold")
+V(net)$color <- colrs[V(net)$type]
 V(net)$size <- 10
 V(net)$frame.color <- "white"
-V(net)$color <- "orange"
 V(net)$label.cex <- 0.9
 deg <- degree(net, mode="all")
-V(net)$size <- 2*deg
+V(net)$size <- 5*sqrt(deg)
 E(net)$arrow.mode <- 0
 E(net)$width <- 2
 
 # Layout type
 l <- layout_with_lgl(net)
-
 # OUPTUP <- graph
-plot(net, layout=l)
+plot(clp, net, layout=l)
 
