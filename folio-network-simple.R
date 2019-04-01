@@ -11,13 +11,12 @@ library(igraph)
 library(dplyr)
 library(gh)
 library(gdata)
-library(stringr)
 
 j_repos <- gh("/users/:username/repos", username = "folio-org")
 vapply(j_repos, "[[", "", "name")
 
 # INPUT ---> List of module names for processing
-modules <- c("ui-orders")
+modules <- c("ui-orders", "ui-vendors", "mod-orders", "edge-oai-pmh", "mod-oai-pmh", "edge-orders", "mod-inventory", "mod-gobi")
 
 nodes <- c()
 type <- c()
@@ -27,34 +26,46 @@ to <- c()
 # Core logic
 for(i in 1:length(modules)) {
   
+  requires <- c()
+ 
+  
   if(startsWith(modules[[i]], "ui")) {
+    print("Processing UI module")
     descriptor <- fromJSON(paste("https://raw.githubusercontent.com/folio-org/", 
                                  modules[[i]], 
-                                 "/master/package.json", sep=""))
+                                 "/master/package.json", sep=""), flatten = TRUE)
     module <- modules[[i]]
-    reqs <- descriptor[["stripes"]][["okapiInterfaces"]]
-
-    for(i in 1:length(reqs[[1]])) {
-      requires[[i]] <- reqs[[3]][[i]]
-    }
     
+    reqs <- names(descriptor[["stripes"]][["okapiInterfaces"]])
+    
+    for(k in 1:length(reqs)) {
+      tmp <- strsplit(reqs[[k]], "[.]")[[1]]
+      if(length(tmp) > 1) {
+        result <- tmp[[1]]
+      } else {
+        result <- tmp
+      }
+      if(!(result %in% requires)) {
+        requires[length(requires) + 1] <- result
+      }
+    }
   } else {
+    print("Processing MOD module")
     descriptor <- fromJSON(paste("https://raw.githubusercontent.com/folio-org/", 
                                  modules[[i]], 
                                  "/master/descriptors/ModuleDescriptor-template.json", sep=""))
-    provides <- descriptor[["provides"]]
-    req <- descriptor[["requires"]]
     
+    provides <- descriptor[["provides"]]
     if(length(provides[["id"]]) == 0) {
       module <- descriptor[["name"]] 
     } else {
       module <- provides[["id"]]
     }
     
-    requires <- c()
+    reqs <- descriptor[["requires"]]
     
-    for(k in 1:length(req[[1]])) {
-      tmp <- strsplit(req[[1]][[k]], "[.]")[[1]]
+    for(k in 1:length(reqs[[1]])) {
+      tmp <- strsplit(reqs[[1]][[k]], "[.]")[[1]]
       if(length(tmp) > 1) {
         result <- tmp[[1]]
       } else {
@@ -69,16 +80,14 @@ for(i in 1:length(modules)) {
   
   if(!(module %in% nodes)) {
     nodes[length(nodes) + 1] <- module
-    if(startsWith(modules[[i]], "edge")) {
+    if(startsWith(modules[[i]], "ui")) {
       type[length(type) + 1] <- 1
-    } else {
+    } else if(startsWith(modules[[i]], "edge")) {
       type[length(type) + 1] <- 2
+    } else {
+      type[length(type) + 1] <- 3
     }
   }
-  
-  
-
-  
 
   
   for(j in 1 : length(requires)) {
@@ -87,7 +96,13 @@ for(i in 1:length(modules)) {
     from[length(from) + 1] <- module
     if(!(dependency %in% nodes)) {
       nodes[length(nodes) + 1] <- dependency
-      type[length(type) + 1] <- 2
+      if(startsWith(dependency, "ui")) {
+        type[length(type) + 1] <- 1
+      } else if(startsWith(dependency, "edge")) {
+        type[length(type) + 1] <- 2
+      } else {
+        type[length(type) + 1] <- 3
+      }
     }
   }
 }
@@ -105,16 +120,19 @@ clp <- cluster_optimal(net)
 class(clp)
 
 # Graph settings
-colrs <- c("gray50", "tomato", "gold")
+colrs <- c("gray50", "gold", "tomato")
 V(net)$color <- colrs[V(net)$type]
 V(net)$size <- 10
 V(net)$frame.color <- "white"
 V(net)$label.cex <- 0.9
+V(net)$frame.color="#555555"
 deg <- degree(net, mode="all")
 V(net)$size <- 5*sqrt(deg)
 E(net)$arrow.mode <- 0
 E(net)$width <- 2
 
 # OUPTUP <- graph
-plot(net)
-
+l <- layout_with_lgl(net) 
+plot(net, layout=l)
+legend(x=-1.5, y=-1.1, c("UI Module","EDGE Module", "Back-End Module"), pch=21,
+       col="#777777", pt.bg=colrs, pt.cex=2, cex=.8, bty="n", ncol=1)
