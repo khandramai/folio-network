@@ -25,7 +25,8 @@ folio_network <- function(modules, isExternalDependenciesIncluded, isVersionsEna
   to <- c()
   mods <- c()
   reqs <- c()
-  
+
+
   # Core logic
   for(i in 1:length(modules)) {
     if(startsWith(modules[[i]], "ui")) {
@@ -37,8 +38,8 @@ folio_network <- function(modules, isExternalDependenciesIncluded, isVersionsEna
       } else {
         mods[[i]] <- descriptor[["name"]]
       }
-      reqs[[i]] <- names(descriptor[["stripes"]][["okapiInterfaces"]])
-    
+      reqs[[i]][[1]] <- names(descriptor[["stripes"]][["okapiInterfaces"]])
+      reqs[[i]][[2]] <- unlist(descriptor[["stripes"]][["okapiInterfaces"]], use.names = FALSE)
     } else {
       descriptor <- fromJSON(paste("https://raw.githubusercontent.com/folio-org/", 
                                    modules[[i]], 
@@ -69,14 +70,14 @@ folio_network <- function(modules, isExternalDependenciesIncluded, isVersionsEna
   
   for(i in 1:length(mods)) {
     requires <- c()
-    if(length(reqs[[i]]) > 0) {
+    if(length(reqs[[i]][[1]]) > 0) {
       if(startsWith(mods[[i]], "@folio")) {
-        for(k in 1:length(reqs[[i]])) {
-          tmp <- strsplit(reqs[[i]][[k]], "[.]")[[1]]
+        for(k in 1:length(reqs[[i]][[1]])) {
+          tmp <- strsplit(reqs[[i]][[1]][[k]], "[.]")[[1]]
           if(length(tmp) > 1) {
-            result <- paste(tmp[[1]], "reqs[[i]][[2]]", sep=":")
+            result <- paste(tmp[[1]], reqs[[i]][[2]][[k]], sep=":")
           } else {
-            result <- paste(tmp, "reqs[[i]][[2]]", sep=":")
+            result <- paste(tmp, reqs[[i]][[2]][[k]], sep=":")
           }
           if(isExternalDependenciesIncluded) {
             if(!(result %in% requires)) {
@@ -97,12 +98,12 @@ folio_network <- function(modules, isExternalDependenciesIncluded, isVersionsEna
               paste(tmp, reqs[[i]][[2]], sep=":")
             }
           if(isExternalDependenciesIncluded) {
-            if(!(result %in% requires)) {
-              requires[length(requires) + 1] <- result
+            if(!(result[[1]] %in% requires)) {
+              requires[length(requires) + 1] <- result[[1]]
             }
           } else {
             if(result %in% mods & !(result %in% requires)) {
-              requires[length(requires) + 1] <- result
+              requires[length(requires) + 1] <- result[[1]]
             }
           }
         }
@@ -177,5 +178,5 @@ folio_network <- function(modules, isExternalDependenciesIncluded, isVersionsEna
          col="#777777", pt.bg=colrs, pt.cex=2, cex=.8, bty="n", ncol=1)
 }
 
-folio_network(c("ui-orders"), TRUE, TRUE)
+folio_network(c("ui-orders", "mod-orders"), TRUE, TRUE)
 
