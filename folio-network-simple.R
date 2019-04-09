@@ -15,9 +15,6 @@ library(gdata)
 j_repos <- gh("/users/:username/repos", username = "folio-org")
 vapply(j_repos, "[[", "", "name")
 
-# INPUT ---> List of module names for processing
-
-
 folio_network <- function(modules, isExternalDependenciesIncluded, isVersionsEnabled){
   nodes <- c()
   type <- c()
@@ -63,22 +60,32 @@ folio_network <- function(modules, isExternalDependenciesIncluded, isVersionsEna
           provides[["id"]]
         }
       }
-      reqs[[i]] <-  descriptor[["requires"]]
+      reqs[[i]] <- descriptor[["requires"]]
     }
   }
   
   
   for(i in 1:length(mods)) {
     requires <- c()
-    if(length(reqs[[i]][[1]]) > 0) {
+    print(reqs[[i]][[1]])
+    if(!is.null(reqs) & length(reqs[[i]][[1]]) > 0) {
       if(startsWith(mods[[i]], "@folio")) {
         for(k in 1:length(reqs[[i]][[1]])) {
           tmp <- strsplit(reqs[[i]][[1]][[k]], "[.]")[[1]]
-          if(length(tmp) > 1) {
-            result <- paste(tmp[[1]], reqs[[i]][[2]][[k]], sep=":")
+          if(isVersionsEnabled) {
+            if(length(tmp) > 1) {
+              result <- paste(tmp[[1]], reqs[[i]][[2]][[k]], sep=":")
+            } else {
+              result <- paste(tmp, reqs[[i]][[2]][[k]], sep=":")
+            }
           } else {
-            result <- paste(tmp, reqs[[i]][[2]][[k]], sep=":")
+            if(length(tmp) > 1) {
+              result <- tmp[[1]]
+            } else {
+              result <- tmp
+            }
           }
+          
           if(isExternalDependenciesIncluded) {
             if(!(result %in% requires)) {
               requires[length(requires) + 1] <- result
@@ -92,11 +99,21 @@ folio_network <- function(modules, isExternalDependenciesIncluded, isVersionsEna
       } else {
         for(k in 1:length(reqs[[i]][[1]])) {
             tmp <- strsplit(reqs[[i]][[1]][[k]], "[.]")[[1]]
-            result <- if(length(tmp) > 1) {
-              paste(tmp[[1]], reqs[[i]][[2]], sep=":")
+            if(isVersionsEnabled) {
+              if(length(tmp) > 1) {
+                result <- paste(tmp[[1]], reqs[[i]][[2]], sep=":")
+              } else {
+                result <- paste(tmp, reqs[[i]][[2]], sep=":")
+              }
             } else {
-              paste(tmp, reqs[[i]][[2]], sep=":")
+              if(length(tmp) > 1) {
+                result <- tmp[[1]]
+              } else {
+                result <- tmp
+              }
+              
             }
+             
           if(isExternalDependenciesIncluded) {
             if(!(result[[1]] %in% requires)) {
               requires[length(requires) + 1] <- result[[1]]
@@ -178,5 +195,6 @@ folio_network <- function(modules, isExternalDependenciesIncluded, isVersionsEna
          col="#777777", pt.bg=colrs, pt.cex=2, cex=.8, bty="n", ncol=1)
 }
 
-folio_network(c("ui-orders", "mod-orders"), TRUE, TRUE)
+modules <- c("mod-vendors")
+folio_network(modules, TRUE, FALSE)
 
