@@ -5,14 +5,14 @@ output: html_notebook
 
 List of Acquisitions/Thunderjet Team modules:
 ```{r}
-modules <- c("ui-orders", "mod-orders", "edge-oai-pmh", "mod-oai-pmh", "edge-orders", "mod-inventory", "mod-gobi", "ui-vendors")
+ACQ_MODULES <- c("ui-orders", "edge-orders", "mod-orders", "ui-vendors", "mod-vendors", "edge-oai-pmh", "mod-oai-pmh", "mod-gobi")
 ```
 
 
 Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Cmd+Shift+Enter*. 
 
 ```{r}
-folio_network(modules, TRUE)
+plotNetworkGraph(ACQ_MODULES, TRUE, FALSE)
 ```
 
 

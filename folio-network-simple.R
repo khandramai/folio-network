@@ -11,172 +11,178 @@ library(igraph)
 library(dplyr)
 library(gh)
 library(gdata)
+library(httr)
 
-j_repos <- gh("/users/:username/repos", username = "folio-org")
-vapply(j_repos, "[[", "", "name")
+j_repos <- gh("/users/:username/repos", username = "folio-org", .limit = 200)
+all_folio_modules <- vapply(j_repos, "[[", "", "name")
 
-folio_network <- function(modules, isExternalDependenciesIncluded, isVersionsEnabled){
-  nodes <- c()
-  type <- c()
-  from <- c()
-  to <- c()
+folio_modules <-c()
+
+for(i in 1:length(all_folio_modules)) {
+  if(startsWith(all_folio_modules[i], "ui-")) {
+    folio_modules[[length(folio_modules) + 1]] <- all_folio_modules[[i]]
+  }
+}
+
+ACQ_MODULES <- c("ui-orders", "edge-orders", "mod-orders", "ui-vendors", "mod-vendors", "edge-oai-pmh", "mod-oai-pmh", "mod-gobi")
+#j_repos <- gh("/users/:username/repos", username = "folio-org")
+#modules <- vapply(j_repos, "[[", "", "name")
+
+getDataFromGitHub <- function(path) {
+  url <- modify_url("https://raw.githubusercontent.com", path = path)
+  resp <- GET(url)
+  if (status_code(resp) == 200) {
+    return(jsonlite::fromJSON(content(resp, "text"), simplifyVector = FALSE))
+  }
+}
+
+print(getDataFromGitHub(paste("/folio-org/", 
+                              "ui-invoice", 
+                              "/master/package.json", sep="")))
+
+getNodeType <- function(name) {
+  if(startsWith(name, "@folio")) {
+    return(1)
+  } else if(endsWith(name, "Edge API")) {
+    return(2)
+  } else {
+    return(3)
+  }
+}
+
+getClusterType <- function(name) {
+  if(startsWith(name, "@folio")) {
+    return(1)
+  } else if(endsWith(name, "Edge API")) {
+    return(2)
+  } else {
+    return(3)
+  }
+}
+
+getRelationsData <- function(modules, isVersionsEnabled) {
   mods <- c()
   reqs <- c()
-
-
-  # Core logic
   for(i in 1:length(modules)) {
     if(startsWith(modules[[i]], "ui")) {
-      descriptor <- fromJSON(paste("https://raw.githubusercontent.com/folio-org/", 
-                                   modules[[i]], 
-                                   "/master/package.json", sep=""), flatten = TRUE)
-      if(isVersionsEnabled) {
-        mods[[i]] <- paste(descriptor[["name"]], descriptor[["version"]], sep=":")
-      } else {
-        mods[[i]] <- descriptor[["name"]]
+      print(paste("UI module", modules[[i]], sep=":"))
+      descriptor <- getDataFromGitHub(paste("/folio-org/", 
+                                            modules[[i]], 
+                                            "/master/package.json", sep=""))
+      if(!is.null(descriptor)) {
+        mods[[i]] <- if(isVersionsEnabled) {
+          paste(descriptor[["name"]], descriptor[["version"]], sep=":")
+        } else {
+          descriptor[["name"]]
+        }
+        
+        names <- names(descriptor[["stripes"]][["okapiInterfaces"]])
+        versions <- unlist(descriptor[["stripes"]][["okapiInterfaces"]], use.names = FALSE)
       }
-      reqs[[i]][[1]] <- names(descriptor[["stripes"]][["okapiInterfaces"]])
-      reqs[[i]][[2]] <- unlist(descriptor[["stripes"]][["okapiInterfaces"]], use.names = FALSE)
+      
+      
     } else {
-      descriptor <- fromJSON(paste("https://raw.githubusercontent.com/folio-org/", 
+      print(paste("MOD module", modules[[i]], sep=":"))
+      descriptor <- getDataFromGitHub(paste("/folio-org/", 
                                    modules[[i]], 
                                    "/master/descriptors/ModuleDescriptor-template.json", sep=""))
-      provides <- descriptor[["provides"]]
+      if(!is.null(descriptor)) {
+        provides <- descriptor[["provides"]]
+        
+        mods[[i]] <- if(isVersionsEnabled) {
+          if(length(provides[["id"]]) > 1) {
+            strsplit(provides[["id"]][[1]], "[.]")[[1]][[1]]
+          } else if(length(provides[["id"]]) == 0) {
+            descriptor[["name"]] 
+          } else {
+            paste(provides[["id"]], provides[["version"]], sep=":")
+          }
+        } else {
+          if(length(provides[["id"]]) > 1) {
+            strsplit(provides[["id"]][[1]], "[.]")[[1]][[1]]
+          } else if(length(provides[["id"]]) == 0) {
+            descriptor[["name"]] 
+          } else {
+            provides[["id"]]
+          }
+        }
+        names <- descriptor[["requires"]][["id"]]
+        versions <- descriptor[["requires"]][["version"]]
+      }
+    }
+    if(isVersionsEnabled) {
+      if(length(names) > 0) {
+        reqs[[mods[[i]]]] <- paste(names, versions, sep=":")
+      }
       
-      if(isVersionsEnabled) {
-        mods[[i]] <- if(length(provides[["id"]]) > 1) {
-          strsplit(provides[["id"]][[1]], "[.]")[[1]][[1]]
-        } else if(length(provides[["id"]]) == 0) {
-          descriptor[["name"]] 
-        } else {
-          paste(provides[["id"]], provides[["version"]], sep=":")
-        }
-      } else {
-        mods[[i]] <- if(length(provides[["id"]]) > 1) {
-          strsplit(provides[["id"]][[1]], "[.]")[[1]][[1]]
-        } else if(length(provides[["id"]]) == 0) {
-          descriptor[["name"]] 
-        } else {
-          provides[["id"]]
-        }
-      }
-      reqs[[i]] <- descriptor[["requires"]]
+    } else {
+      reqs[[mods[[i]]]] <- unlist(lapply(strsplit(as.character(names), "[.]"),"[", 1))
+      reqs[[mods[[i]]]] <- unique(reqs[[mods[[i]]]])
     }
   }
-  
-  
-  for(i in 1:length(mods)) {
-    requires <- c()
-    print(reqs[[i]][[1]])
-    if(!is.null(reqs) & length(reqs[[i]][[1]]) > 0) {
-      if(startsWith(mods[[i]], "@folio")) {
-        for(k in 1:length(reqs[[i]][[1]])) {
-          tmp <- strsplit(reqs[[i]][[1]][[k]], "[.]")[[1]]
-          if(isVersionsEnabled) {
-            if(length(tmp) > 1) {
-              result <- paste(tmp[[1]], reqs[[i]][[2]][[k]], sep=":")
-            } else {
-              result <- paste(tmp, reqs[[i]][[2]][[k]], sep=":")
-            }
-          } else {
-            if(length(tmp) > 1) {
-              result <- tmp[[1]]
-            } else {
-              result <- tmp
-            }
+  return(reqs)
+}
+
+getNetData <- function(data, isExternalDependenciesIncluded, isVersionsEnabled) {
+    nodes <- c() 
+    type <- c()
+    cluster <- c()
+    from <- c()
+    to <- c()
+    names <- names(data)
+    for(j in 1:length(names)) {
+      name <- names[[j]]
+      dependencies <- data[[name]]
+      if(!(name %in% nodes)) {
+        nodes[[length(nodes) + 1]] <- name
+        type[[length(type) + 1]] <- getNodeType(name)
+        cluster[[length(type) + 1]] <- getClusterType(name)
+      }
+      for(k in 1:length(dependencies)) {
+        if(isExternalDependenciesIncluded) {
+          from[[length(from) + 1]] <- name
+          to[[length(to) + 1]] <- dependencies[[k]]
+          if(!(dependencies[[k]] %in% nodes)) {
+            nodes[[length(nodes) + 1]] <- dependencies[[k]]
+            type[[length(type) + 1]] <- getNodeType(dependencies[[k]])
+            cluster[[length(cluster)]] <- getClusterType(dependencies[[k]])
           }
-          
-          if(isExternalDependenciesIncluded) {
-            if(!(result %in% requires)) {
-              requires[length(requires) + 1] <- result
-            }
-          } else {
-            if(result %in% mods & !(result %in% requires)) {
-              requires[length(requires) + 1] <- result
-            }
-          }
-        }
-      } else {
-        for(k in 1:length(reqs[[i]][[1]])) {
-            tmp <- strsplit(reqs[[i]][[1]][[k]], "[.]")[[1]]
-            if(isVersionsEnabled) {
-              if(length(tmp) > 1) {
-                result <- paste(tmp[[1]], reqs[[i]][[2]], sep=":")
-              } else {
-                result <- paste(tmp, reqs[[i]][[2]], sep=":")
-              }
-            } else {
-              if(length(tmp) > 1) {
-                result <- tmp[[1]]
-              } else {
-                result <- tmp
-              }
-              
-            }
-             
-          if(isExternalDependenciesIncluded) {
-            if(!(result[[1]] %in% requires)) {
-              requires[length(requires) + 1] <- result[[1]]
-            }
-          } else {
-            if(result %in% mods & !(result %in% requires)) {
-              requires[length(requires) + 1] <- result[[1]]
+        } else {
+          if(dependencies[[k]] %in% names) {
+            from[[length(from) + 1]] <- name
+            to[[length(to) + 1]] <- dependencies[[k]]
+            if(!(dependencies[[k]] %in% nodes)) {
+              nodes[[length(nodes) + 1]] <- dependencies[[k]]
+              type[[length(type) + 1]] <- getNodeType(dependencies[[k]])
+              cluster[[length(cluster) + 1]] <- getClusterType(dependencies[[k]])
             }
           }
         }
       }
     }
-    
-    
-    # Add nodes from modules
-    if(!(mods[[i]] %in% nodes)) {
-      nodes[length(nodes) + 1] <- mods[[i]]
-      if(startsWith(modules[[i]], "ui")) {
-        type[length(type) + 1] <- 1
-      } else if(startsWith(modules[[i]], "edge")) {
-        type[length(type) + 1] <- 2
-      } else {
-        type[length(type) + 1] <- 3
-      }
-    }
-    
-    # Create new nodes from dependencies
-    if(length(requires) > 0) {
-      for(j in 1 : length(requires)) {
-        dependency <- requires[[j]]
-        to[length(to) + 1] <- dependency 
-        from[length(from) + 1] <- mods[[i]]
-        if(!(dependency %in% nodes)) {
-          nodes[length(nodes) + 1] <- dependency
-          if(startsWith(dependency, "ui")) {
-            type[length(type) + 1] <- 1
-          } else if(startsWith(dependency, "edge")) {
-            type[length(type) + 1] <- 2
-          } else {
-            type[length(type) + 1] <- 3
-          }
-        }
-      }
-    }
-  }
-  
-  # Data frames constructing
-  modules <- data.frame(nodes, type)
-  relations <- data.frame(from, to)
-  
-  # Net-object constructing
-  net <- graph_from_data_frame(relations, directed=TRUE, vertices=modules)
-  
-  
-  # Community detection (by optimizing modularity over partitions):
-  clp <- cluster_optimal(net)
-  class(clp)
-  
+    modules <- data.frame(nodes, type)
+    relations <- data.frame(from, to)
+    return(graph_from_data_frame(relations, directed=TRUE, vertices=modules))
+}
+
+getNetGraph <- function(modules, isExternalDependenciesIncluded, isVersionsEnabled) {
+  data <- getRelationsData(modules, isVersionsEnabled)
+  graph <- getNetData(data, isExternalDependenciesIncluded, isVersionsEnabled)
+  return(graph)
+}
+
+# Community detection (by optimizing modularity over partitions):
+#clp <- cluster_optimal(net)
+#class(clp)
+
+plotNetworkGraph <- function(modules, isExternalDependenciesIncluded, isVersionsEnabled) {
+  net <- getNetGraph(modules, isExternalDependenciesIncluded, isVersionsEnabled)
   # Graph settings
   colrs <- c("gray50", "gold", "tomato")
   V(net)$color <- colrs[V(net)$type]
   V(net)$size <- 10
   V(net)$frame.color <- "white"
+#  V(net)$label <- NA
   V(net)$label.cex <- 0.9
   V(net)$frame.color="#555555"
   deg <- degree(net, mode="all")
@@ -189,12 +195,14 @@ folio_network <- function(modules, isExternalDependenciesIncluded, isVersionsEna
   E(net)$width <- 2
   
   # OUPTUP <- graph
-  l <- layout_with_lgl(net) 
+  l <- layout_with_kk(net) 
   plot(net)
-  legend(x=-1.5, y=-1.1, c("UI Module","EDGE Module", "Back-End Module"), pch=21,
+  legend(x=-1.0, y=-1.0, c("UI Module","EDGE Module", "Back-End Module"), pch=21,
          col="#777777", pt.bg=colrs, pt.cex=2, cex=.8, bty="n", ncol=1)
 }
 
-modules <- c("mod-vendors")
-folio_network(modules, TRUE, FALSE)
+plotNetworkGraph(c("ui-invoice"), TRUE, FALSE)
+#plotNetworkGraph(ACQ_MODULES, TRUE, TRUE)
 
+
+  
