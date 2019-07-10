@@ -2,7 +2,7 @@
 
 ## Version
 1.0.0-beta 03/26/2019
-Added basic logic only for Folio back-end modules network graph visualization.
+Added basic logic for Folio and ACQ/Thunderjet modules (EDGE, UI, Back-End) network graph visualization.
 
 ## System requirements
 Windows, Unix, Mac OS machine with installed R software https://www.r-project.org
